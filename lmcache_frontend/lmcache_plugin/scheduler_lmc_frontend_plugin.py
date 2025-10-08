@@ -10,11 +10,20 @@ import signal
 import sys
 
 # First Party
-from lmcache.integration.vllm.utils import lmcache_get_config
+try:
+    from lmcache.integration.vllm.utils import (
+        lmcache_get_or_create_config as get_config,
+    )
+except ImportError:
+    from lmcache.integration.vllm.utils import lmcache_get_config as get_config
+
 from lmcache.v1.config import LMCacheEngineConfig
 from lmcache.v1.internal_api_server.utils import get_all_server_infos
 
-from lmcache_frontend import app
+try:
+    from lmcache_frontend import app
+except ImportError:
+    from .lmcache_frontend import app  # type: ignore
 
 
 # Graceful exit handler
@@ -33,7 +42,7 @@ try:
     config = LMCacheEngineConfig.from_json(config_str)
 except Exception as e:
     print(f"Error parsing LMCACHE_PLUGIN_CONFIG: {e}")
-    config = lmcache_get_config()
+    config = get_config()
 
 print(f"Python plugin running with role: {role}")
 print(f"Config: {config}")
@@ -46,10 +55,15 @@ port = config.extra_config.get(
 sys.argv = [
     sys.argv[0],
     "--port",
-    str(int(port) if port else 8000),
+    str(int(port)) if port is not None else "8000",
     "--host",
     "0.0.0.0",
 ]
+
+for key, value in config.extra_config.items():
+    if key.startswith("plugin.frontend."):
+        arg_name = "--" + key.replace("plugin.frontend.", "")
+        sys.argv.extend([arg_name, str(value)])
 if nodes:
     if isinstance(nodes, (list, dict)):
         nodes = json.dumps(nodes)
